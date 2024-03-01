@@ -28,6 +28,9 @@ sudo ./sysstream 32076 31996
 
 The above will run the utility and monitor system calls for processes `32076` and `31996`.  It will write to the default log file `sysstream.log`.
 
+Building:
+The provided `makefile` should handle everything.  Basically it first generates `vmlinux.h` which is a header specific to the linux kernel version you are using.  From there it compiles the `sysstream.bpf.c` program.  After that it takes the output elf file `sysstream.bpf.o` and via the `bpftool` generates helper functions via creating the `sysstream.skel.h` file.  At this point everything is created to compile the userspace program `sysstream.c`. Simply run `make` to build, and `make clean` to clean up all of the generated files. 
+
 ### Log output format
 As mentioned above the log output format is delimited by a tab.  The log records record a stream of events from the linux kernel.   You can assume the events are in order.  Each log record is a 64 bit hex number.  The upper 32 bits are the process id and the lower 32 bits are the system call numeber.  For example a log record: of `7cfc00000062` would be split into `0x7cfc` and `0x62`.  Converting to decimal would result in `pid:31996` making `system_call:98`
 
