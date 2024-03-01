@@ -1,4 +1,4 @@
-## Sysstream eBPF Utility
+## SysStream - an eBPF Utility
 
 Run `systream -h`:  
 
@@ -28,7 +28,7 @@ sudo ./sysstream 32076 31996
 
 The above will run the utility and monitor system calls for processes `32076` and `31996`.  It will write to the default log file `sysstream.log`.
 
-Building:
+#### Building
 The provided `makefile` should handle everything.  Basically it first generates `vmlinux.h` which is a header specific to the linux kernel version you are using.  From there it compiles the `sysstream.bpf.c` program.  After that it takes the output elf file `sysstream.bpf.o` and via the `bpftool` generates helper functions via creating the `sysstream.skel.h` file.  At this point everything is created to compile the userspace program `sysstream.c`. Simply run `make` to build, and `make clean` to clean up all of the generated files. 
 
 ### Log output format
