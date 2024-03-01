@@ -16,6 +16,7 @@ FILE *OUTPUT_FP;
 
 //GLOBALS & defaults
 int MY_PID = 0;
+uint64_t SC_COUNTER = 0;
 bool INCLUDE_MONITOR_EVENTS = false;
 bool VERBOSE_OUTPUT = false;
 bool USE_PID_FILTER_TABLE = true;
@@ -99,9 +100,12 @@ static int sc_callback(void *ctx, void *data, size_t len) {
   //NOTE YOU CAN CHANGE THE DELIMITER IF YOU WANT, I SET IT TO TAB
   fprintf(OUTPUT_FP, "%lx\t", edata);
 
+  SC_COUNTER++;
   if (VERBOSE_OUTPUT)
     printf("pid: %d sc: %d log:%lx\n", pid, syscall_id, edata);
-
+  else
+    if (SC_COUNTER % 100 == 0)
+      printf("Total system calls processed: %ld\r", SC_COUNTER);
   return 0;
 }
 
@@ -187,12 +191,15 @@ int main(int argc, char **argv) {
     }
     sleep(1);
   }
-
+  printf("\n");
+  printf("Cleaning up...\n ");
   //CLEANUP
   //Free the resources
   ring_buffer__free(rb);
   sysstream_bpf__detach(skel);
   sysstream_bpf__destroy(skel);
+
+  printf("Total system calls processed: %ld\n", SC_COUNTER);
 
   //close output file
   fflush(OUTPUT_FP);

@@ -20,6 +20,14 @@ default delimeter for the output file records is a `\t`.  This can be altered in
 
 There is a lot of room for improvement with the code (e.g., global variables) but its a helpful utility that I thought I would share.
 
+Example:
+
+```bash
+sudo ./sysstream 32076 31996 
+```
+
+The above will run the utility and monitor system calls for processes `32076` and `31996`.  It will write to the default log file `sysstream.log`.
+
 ### Log output format
 As mentioned above the log output format is delimited by a tab.  The log records record a stream of events from the linux kernel.   You can assume the events are in order.  Each log record is a 64 bit hex number.  The upper 32 bits are the process id and the lower 32 bits are the system call numeber.  For example a log record: of `7cfc00000062` would be split into `0x7cfc` and `0x62`.  Converting to decimal would result in `pid:31996` making `system_call:98`
 
