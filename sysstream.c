@@ -16,6 +16,7 @@ FILE *OUTPUT_FP;
 
 //GLOBALS & defaults
 int MY_PID = 0;
+pid_t MIN_PROCESS_ID = 0;
 uint64_t SC_COUNTER = 0;
 bool INCLUDE_MONITOR_EVENTS = false;
 bool VERBOSE_OUTPUT = false;
@@ -33,12 +34,16 @@ struct rb_event{
 static void initParams(int argc, char *argv[]){
   int option;
   int count = 1;
-  while ((option = getopt(argc, argv, ":f:mphva")) != -1){
+  while ((option = getopt(argc, argv, ":f:l:mphva")) != -1){
     printf("OPTION %c\n", option);
     switch(option) {
         case 'f':
             strncpy(DEFAULT_FILE_NAME, 
                 optarg, sizeof(DEFAULT_FILE_NAME) - 1);
+            count += 2;
+            break;
+        case 'l':
+            MIN_PROCESS_ID = atoi(optarg);
             count += 2;
             break;
         case 'm':
@@ -61,6 +66,7 @@ static void initParams(int argc, char *argv[]){
             printf("Usage: %s [-f <file>] [-m] [-v] [-h] [PID_LIST...]\n", argv[0]);
             printf("Options:\n");
             printf("  -f <file>  : Output file name (default: sysstream.log)\n");
+            printf("  -l <pid>   : Lower bound pid to monitor, all pid above will be collected\n");
             printf("  -m         : Include monitor events\n");
             printf("  -v         : Display verbose output\n");
             printf("  -a         : Monitor everything overrides all filters\n");
@@ -89,6 +95,8 @@ static void initParams(int argc, char *argv[]){
   printf("USE_PID_FILTER_TABLE: %d\n", USE_PID_FILTER_TABLE);
   printf("PID_FILTER_TABLE_SIZE: %d\n", PID_FILTER_TABLE_SIZE);
   printf("MONITOR_EVERYTHING: %d\n", MONITOR_EVERYTHING);
+  printf("VERBOSE_OUTPUT: %d\n", VERBOSE_OUTPUT);
+  printf("MIN_PROCESS_ID: %d\n", MIN_PROCESS_ID);
   for (int i = 0; i < PID_FILTER_TABLE_SIZE; i++){
     printf("\t- %d. pid to monitor: %d\n", i,PID_FILTER_TABLE[i]);
   }
@@ -148,6 +156,7 @@ int main(int argc, char **argv) {
   skel->rodata->monitor_pid = getpid(); 
   skel->rodata->include_monitor_events = INCLUDE_MONITOR_EVENTS;
   skel->rodata->montior_everything = MONITOR_EVERYTHING;
+  skel->rodata->min_pid_to_monitor = MIN_PROCESS_ID;
   
   //2. LOAD the EBPF Handler INTO Kernel
   err = sysstream_bpf__load(skel);

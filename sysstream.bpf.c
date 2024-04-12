@@ -11,6 +11,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 const volatile pid_t filter_pid = 0;			//set to PID of monitor if you want to exclude these messages
 const volatile pid_t monitor_pid = 0; 			//set to PID if you only want to monitor that particular process
+const volatile pid_t min_pid_to_monitor = 0;	//set to the minimum pid to monitor
 const volatile bool include_monitor_events = false;
 const volatile bool use_pid_filter_table = true;
 const volatile bool montior_everything = false;
@@ -60,29 +61,33 @@ int sys_exit(struct trace_event_raw_sys_exit *args)
 	//if monitor everthing is true, montior all syscalls, likely not
 	//reccomended but maybe useful for debugging
 	if (montior_everything == false){
-		//quicly short circuit if a value not set, then if it is set check if this is the filter
-		//of interest
-		if ((filter_pid != 0) && (filter_pid != upid)){
-				return 0;
-		}
 
-		//handle filtering out of the monitor syscalls if enabled
-		if (monitor_pid == upid){
-			if (!include_monitor_events){
-				return 0;
+		//check for more details if we have a min filter flag set.  If the
+		//upid is not set aka 0 or is below the min threshold see if some of the
+		//other filters hit, if not this is something we want to include
+		if ((min_pid_to_monitor == 0) || (upid < min_pid_to_monitor)){
+			//quicly short circuit if a value not set, then if it is set check if this is the filter
+			//of interest
+			if ((filter_pid != 0) && (filter_pid != upid)){
+					return 0;
 			}
-		}
-	
 
-	
-		//now lets look if the pid is in the filter table
-		if (use_pid_filter_table){
-			u64 upid64 = upid;
-			u64 *val;
-			
-			val = bpf_map_lookup_elem(&pid_filter_table, &upid64);
-			if (!val || *val == 0){
-				return 0;
+			//handle filtering out of the monitor syscalls if enabled
+			if (monitor_pid == upid){
+				if (!include_monitor_events){
+					return 0;
+				}
+			}
+
+			//now lets look if the pid is in the filter table
+			if (use_pid_filter_table){
+				u64 upid64 = upid;
+				u64 *val;
+				
+				val = bpf_map_lookup_elem(&pid_filter_table, &upid64);
+				if (!val || *val == 0){
+					return 0;
+				}
 			}
 		}
 	}
