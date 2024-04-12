@@ -19,6 +19,7 @@ int MY_PID = 0;
 uint64_t SC_COUNTER = 0;
 bool INCLUDE_MONITOR_EVENTS = false;
 bool VERBOSE_OUTPUT = false;
+bool MONITOR_EVERYTHING = false;
 bool USE_PID_FILTER_TABLE = true;
 char DEFAULT_FILE_NAME[128] = "sysstream.log";
 uint32_t PID_FILTER_TABLE[MAX_PIDS];
@@ -32,7 +33,7 @@ struct rb_event{
 static void initParams(int argc, char *argv[]){
   int option;
   int count = 1;
-  while ((option = getopt(argc, argv, ":f:mphv")) != -1){
+  while ((option = getopt(argc, argv, ":f:mphva")) != -1){
     printf("OPTION %c\n", option);
     switch(option) {
         case 'f':
@@ -52,12 +53,17 @@ static void initParams(int argc, char *argv[]){
             VERBOSE_OUTPUT = true;
             count++;
             break;
+        case 'a':
+            MONITOR_EVERYTHING = true;
+            count++;
+            break;
         case 'h':
             printf("Usage: %s [-f <file>] [-m] [-v] [-h] [PID_LIST...]\n", argv[0]);
             printf("Options:\n");
             printf("  -f <file>  : Output file name (default: sysstream.log)\n");
             printf("  -m         : Include monitor events\n");
             printf("  -v         : Display verbose output\n");
+            printf("  -a         : Monitor everything overrides all filters\n");
             printf("  -h         : Display this help message\n\n");
             printf("  PID_LIST   : Comma seperated list of PIDs to monitor\n\n");
             exit(0);
@@ -82,6 +88,7 @@ static void initParams(int argc, char *argv[]){
   printf("INCLUDE_MONITOR_EVENTS: %d\n", INCLUDE_MONITOR_EVENTS);
   printf("USE_PID_FILTER_TABLE: %d\n", USE_PID_FILTER_TABLE);
   printf("PID_FILTER_TABLE_SIZE: %d\n", PID_FILTER_TABLE_SIZE);
+  printf("MONITOR_EVERYTHING: %d\n", MONITOR_EVERYTHING);
   for (int i = 0; i < PID_FILTER_TABLE_SIZE; i++){
     printf("\t- %d. pid to monitor: %d\n", i,PID_FILTER_TABLE[i]);
   }
@@ -139,7 +146,8 @@ int main(int argc, char **argv) {
 
   //1.a PRE-Initialize the EBPF Handler BEFORE Loading
   skel->rodata->monitor_pid = getpid(); 
-  skel->rodata->include_monitor_events = false;
+  skel->rodata->include_monitor_events = INCLUDE_MONITOR_EVENTS;
+  skel->rodata->montior_everything = MONITOR_EVERYTHING;
   
   //2. LOAD the EBPF Handler INTO Kernel
   err = sysstream_bpf__load(skel);

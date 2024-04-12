@@ -13,6 +13,7 @@ const volatile pid_t filter_pid = 0;			//set to PID of monitor if you want to ex
 const volatile pid_t monitor_pid = 0; 			//set to PID if you only want to monitor that particular process
 const volatile bool include_monitor_events = false;
 const volatile bool use_pid_filter_table = true;
+const volatile bool montior_everything = false;
 
 
 #define MAX_ENTRIES 512
@@ -56,31 +57,36 @@ int sys_exit(struct trace_event_raw_sys_exit *args)
 	if(syscall_id == (u32)-1)
 		return 0;
 		
-	//quicly short circuit if a value not set, then if it is set check if this is the filter
-	//of interest
-	if ((filter_pid != 0) && (filter_pid != upid)){
-			return 0;
-	}
-
-	//handle filtering out of the monitor syscalls if enabled
-	if (monitor_pid == upid){
-		if (!include_monitor_events){
-			return 0;
+	//if monitor everthing is true, montior all syscalls, likely not
+	//reccomended but maybe useful for debugging
+	if (montior_everything == false){
+		//quicly short circuit if a value not set, then if it is set check if this is the filter
+		//of interest
+		if ((filter_pid != 0) && (filter_pid != upid)){
+				return 0;
 		}
-	}
+
+		//handle filtering out of the monitor syscalls if enabled
+		if (monitor_pid == upid){
+			if (!include_monitor_events){
+				return 0;
+			}
+		}
+	
 
 	
-	//now lets look if the pid is in the filter table
-	if (use_pid_filter_table){
-		u64 upid64 = upid;
-		u64 *val;
-		
-		val = bpf_map_lookup_elem(&pid_filter_table, &upid64);
-		if (!val || *val == 0){
-			return 0;
+		//now lets look if the pid is in the filter table
+		if (use_pid_filter_table){
+			u64 upid64 = upid;
+			u64 *val;
+			
+			val = bpf_map_lookup_elem(&pid_filter_table, &upid64);
+			if (!val || *val == 0){
+				return 0;
+			}
 		}
 	}
-		
+			
 	//END OF FILTERING, this is something we want to stream back to userland
 	u64 *task_info;
 	task_info = bpf_ringbuf_reserve(&sc_rb, sizeof(u64), 0);
