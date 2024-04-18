@@ -22,6 +22,7 @@ bool INCLUDE_MONITOR_EVENTS = false;
 bool VERBOSE_OUTPUT = false;
 bool MONITOR_EVERYTHING = false;
 bool USE_PID_FILTER_TABLE = true;
+bool DYNAMIC_MONITOR=false;
 char DEFAULT_FILE_NAME[128] = "sysstream.log";
 uint32_t PID_FILTER_TABLE[MAX_PIDS];
 uint32_t PID_FILTER_TABLE_SIZE = 0;
@@ -31,10 +32,33 @@ struct rb_event{
   uint64_t evnt;
 };
 
+static bool check_log_file_overrite(char *filename){
+  bool file_exists = false;
+  if (access(filename, F_OK) != -1) 
+    file_exists = true;
+
+  if (file_exists){
+    printf("File %s already exists, do you want to overwrite? (Y/n): ", filename);
+    char c = getchar();
+    if ((c == 'Y')||(c == 'y')){
+      scanf("%*c"); //clear buffer
+      printf("\nAre you sure? (Y/n): ");
+      c = getchar();
+      printf("\n");
+      if ((c == 'Y')||(c == 'y'))
+        return true;
+      else
+        return false;
+    } 
+  }
+  //file did not exist, just overwrite
+  return true;
+}
+
 static void initParams(int argc, char *argv[]){
   int option;
   int count = 1;
-  while ((option = getopt(argc, argv, ":f:l:mphva")) != -1){
+  while ((option = getopt(argc, argv, ":f:l:mphvad")) != -1){
     printf("OPTION %c\n", option);
     switch(option) {
         case 'f':
@@ -62,6 +86,10 @@ static void initParams(int argc, char *argv[]){
             MONITOR_EVERYTHING = true;
             count++;
             break;
+        case 'd':
+            DYNAMIC_MONITOR = true;
+            count++;
+            break;
         case 'h':
             printf("Usage: %s [-f <file>] [-m] [-v] [-h] [PID_LIST...]\n", argv[0]);
             printf("Options:\n");
@@ -70,6 +98,7 @@ static void initParams(int argc, char *argv[]){
             printf("  -m         : Include monitor events\n");
             printf("  -v         : Display verbose output\n");
             printf("  -a         : Monitor everything overrides all filters\n");
+            printf("  -d         : Dynamic all new processes created\n");
             printf("  -h         : Display this help message\n\n");
             printf("  PID_LIST   : Comma seperated list of PIDs to monitor\n\n");
             exit(0);
@@ -125,7 +154,7 @@ static int sc_callback(void *ctx, void *data, size_t len) {
 }
 
 //ADD PID TO THE LIST OF FILTERS BEING WATCHED BY THE EBPF PROGRAM
-int add_pid__to_filter(struct sysstream_bpf *skel, uint32_t pid){
+int add_pid__to_filter_DELETE(struct sysstream_bpf *skel, uint32_t pid){
   uint64_t constant_one = 1;
   uint64_t u64sz = sizeof(uint64_t);
   uint64_t u64pid = pid;
@@ -133,6 +162,17 @@ int add_pid__to_filter(struct sysstream_bpf *skel, uint32_t pid){
   return bpf_map__update_elem(skel->maps.pid_filter_table, 
       &u64pid, u64sz, &constant_one, u64sz, BPF_ANY);
 }
+
+int add_pid__to_filter(struct sysstream_bpf *skel, pid_t pid){
+  uint32_t constant_one = 1;
+  size_t pid_sz = sizeof(pid_t);
+  size_t u32_sz = sizeof(uint32_t);
+  pid_t mpid = pid;
+  
+  return bpf_map__update_elem(skel->maps.pid_monitor_table, 
+      &mpid, pid_sz, &constant_one, u32_sz, BPF_ANY);
+}
+
 
 int main(int argc, char **argv) {
   int err;
@@ -144,6 +184,12 @@ int main(int argc, char **argv) {
   MY_PID = getpid();
   printf("MY PID: %d\n", getpid());
   initParams(argc, argv);       //get command line info
+
+  //CHECK IF FILE EXISTS, PROMPT TO OVERWRITE
+  if (!check_log_file_overrite(DEFAULT_FILE_NAME)){
+    printf("\nExiting to avoid overrite of log file...\n");
+    return 0;
+  }
 
   //1. OPEN the EBPF Handler
   skel = sysstream_bpf__open();
@@ -157,6 +203,7 @@ int main(int argc, char **argv) {
   skel->rodata->include_monitor_events = INCLUDE_MONITOR_EVENTS;
   skel->rodata->montior_everything = MONITOR_EVERYTHING;
   skel->rodata->min_pid_to_monitor = MIN_PROCESS_ID;
+  skel->rodata->dynamic_pid_service = DYNAMIC_MONITOR;
   
   //2. LOAD the EBPF Handler INTO Kernel
   err = sysstream_bpf__load(skel);

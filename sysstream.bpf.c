@@ -15,9 +15,16 @@ const volatile pid_t min_pid_to_monitor = 0;	//set to the minimum pid to monitor
 const volatile bool include_monitor_events = false;
 const volatile bool use_pid_filter_table = true;
 const volatile bool montior_everything = false;
+const volatile bool dynamic_pid_service = false;
+
+const volatile bool log_enter_exit = false;
+const volatile bool log_syscall = false;
+
+volatile __u64 kernal_sc_count = 0;
 
 
 #define MAX_ENTRIES 512
+#define MAX_PID_ENTRIES 1024
 
 const struct event *unused __attribute__((unused)); 
 
@@ -35,6 +42,131 @@ struct {
 	__type(key, u64);
 	__type(value, u64);
 } pid_filter_table SEC(".maps"); 
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, MAX_PID_ENTRIES);
+	__type(key, pid_t);
+	__type(value, u32);
+} pid_monitor_table SEC(".maps"); 
+
+static __always_inline bool is_kernel_pid() {
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	struct nsproxy *namespaceproxy = BPF_CORE_READ(task, nsproxy);
+    u32 nsid = BPF_CORE_READ(namespaceproxy, pid_ns_for_children, ns.inum);
+	return nsid == 0;
+}
+
+static __always_inline pid_t get_userspace_pid() {
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	unsigned int level = BPF_CORE_READ(task, nsproxy, pid_ns_for_children, level);
+	pid_t upid = BPF_CORE_READ(task, group_leader, thread_pid, numbers[level].nr);
+	return upid;
+}
+
+//SEC("tp/sched/sched_process_exit")
+//int handle_exit(struct trace_event_raw_sched_process_template* ctx)
+SEC("kprobe/do_exit")
+int do_exit(struct pt_regs *ctx)
+{
+	if (!dynamic_pid_service)
+		return 0;
+
+    pid_t pid = get_userspace_pid();
+	long rc = bpf_map_delete_elem(&pid_monitor_table, &pid);
+
+	if (log_enter_exit){
+		if (rc == 0)
+			bpf_printk("[DELETE] pid = %d\n", pid);
+		else
+			bpf_printk("[ERR-DEL] pid = %d, rc = %d\n", pid, rc);
+	}
+
+	return 0;
+}
+
+//currently SEC("kprobe/do_execve") does not work on arm, need to fall back to syscall
+//SEC("kprobe/do_execve")
+//int do_exceve(struct pt_regs *ctx)
+// //➜  ebpf-streamer git:(main) ✗ sudo cat /sys/kernel/tracing/events/syscalls/sys_enter_execve/format
+struct execve_entry_args_t {
+    __u64 _unused;
+    __u64 _unused2;
+
+    const char* filename;
+    const char* const* argv;
+    const char* const* envp;
+};
+SEC("tracepoint/syscalls/sys_enter_execve")
+int enter_execve(struct execve_entry_args_t *ctx)
+{
+	if (!dynamic_pid_service)
+		return 0;
+
+	pid_t pid = get_userspace_pid();
+	u32 on = 1;
+	
+	long rc = bpf_map_update_elem(&pid_monitor_table, &pid, &on, BPF_ANY);
+
+	if (log_enter_exit){
+		if (rc == 0)
+			bpf_printk("[ADD] pid = %d\n", pid);
+		else
+			bpf_printk("[ERR-ADD] pid = %d, rc = %d\n", pid, rc);
+	}
+	return 0;
+}
+
+	
+
+// //➜  ebpf-streamer git:(main) ✗ sudo cat /sys/kernel/tracing/events/syscalls/sys_enter_execve/format
+// struct execve_entry_args_t {
+//     __u64 _unused;
+//     __u64 _unused2;
+
+//     const char* filename;
+//     const char* const* argv;
+//     const char* const* envp;
+// };
+// SEC("tracepoint/syscalls/sys_enter_execve")
+// int enter_execve(struct execve_entry_args_t *ctx)
+// {
+// 	pid_t pid, tid;
+// 	u64 id;
+// 	u32 on = 1;
+
+// 	 /* get PID and TID of exiting thread/process */
+//     id = bpf_get_current_pid_tgid();
+//     pid = id >> 32;
+//     tid = (u32)id;
+
+// 	long rc = bpf_map_update_elem(&pid_monitor_table, &pid, &on, BPF_ANY);
+
+// 	if (rc == 0)
+// 		bpf_printk("[ADD] pid = %d\n", pid);
+// 	else
+// 		bpf_printk("[ERR-DEL] pid = %d, rc = %d\n", pid, rc);
+
+// 	return 0;
+
+//         // char comm[128];
+
+//         // struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+//         // unsigned int level = BPF_CORE_READ(task, nsproxy, pid_ns_for_children, level);
+//         // unsigned int upid = BPF_CORE_READ(task, group_leader, thread_pid, numbers[level].nr);
+
+
+//         // struct task_struct *ptask = BPF_CORE_READ(task, real_parent);
+//         // unsigned int plevel = BPF_CORE_READ(task, real_parent, nsproxy, pid_ns_for_children, level );
+//         // unsigned int uppid = BPF_CORE_READ(task, real_parent, group_leader, thread_pid, numbers[plevel].nr);
+
+//         // //memset(comm, 0, sizeof(comm));
+//         // bpf_probe_read_kernel(comm, sizeof(comm)-1, ptask->comm);
+
+// 		//         bpf_printk("Process started, %s / %s pid = %d/%d \n", ctx->filename, comm, upid, uppid);
+
+//         // return 0;
+// }
 
 
 
@@ -57,6 +189,15 @@ int sys_exit(struct trace_event_raw_sys_exit *args)
 	//that sometimes ebpf returns -1 for a syscall identifier basically 0xFFFFFFFF
 	if(syscall_id == (u32)-1)
 		return 0;
+
+	//bpf_printk("Is kernel pid %d\n", is_kernel_pid());
+
+	if (is_kernel_pid()){
+		kernal_sc_count++;
+		if (kernal_sc_count % 1000 == 0){
+			bpf_printk("Kernel SC Count: %d\n", kernal_sc_count);
+		}
+	}
 		
 	//if monitor everthing is true, montior all syscalls, likely not
 	//reccomended but maybe useful for debugging
@@ -81,12 +222,12 @@ int sys_exit(struct trace_event_raw_sys_exit *args)
 
 			//now lets look if the pid is in the filter table
 			if (use_pid_filter_table){
-				u64 upid64 = upid;
-				u64 *val;
-				
-				val = bpf_map_lookup_elem(&pid_filter_table, &upid64);
+				u32 *val = bpf_map_lookup_elem(&pid_monitor_table, &upid);
 				if (!val || *val == 0){
 					return 0;
+				}
+				if (log_syscall){
+					bpf_printk("[SYSCALL] pid: %d sc: %d\n", upid, syscall_id);
 				}
 			}
 		}
