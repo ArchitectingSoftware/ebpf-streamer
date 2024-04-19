@@ -95,7 +95,7 @@ static void initParams(int argc, char *argv[]){
             printf("Options:\n");
             printf("  -f <file>  : Output file name (default: sysstream.log)\n");
             printf("  -l <pid>   : Lower bound pid to monitor, all pid above will be collected\n");
-            printf("  -m         : Include monitor events\n");
+            printf("  -m         : Include monitor events (by default always excluded) \n");
             printf("  -v         : Display verbose output\n");
             printf("  -a         : Monitor everything overrides all filters\n");
             printf("  -d         : Dynamic all new processes created\n");

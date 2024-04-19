@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "bpf_helpers.h": "c"
+        "bpf_helpers.h": "c",
+        "sched.h": "c",
+        "types.h": "c"
     }
 }
