@@ -51,6 +51,11 @@ struct {
 } pid_monitor_table SEC(".maps"); 
 
 
+
+
+//Note these are not supported on the rasberry pi, so you need to use the makefile.pi that sets this macro properly
+#ifndef _RPI_
+
 static __always_inline pid_t get_userspace_pid() {
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	unsigned int level = BPF_CORE_READ(task, nsproxy, pid_ns_for_children, level);
@@ -110,7 +115,7 @@ int enter_execve(struct execve_entry_args_t *ctx)
 	}
 	return 0;
 }
-
+#endif
 
 SEC("tracepoint/raw_syscalls/sys_exit")
 int sys_exit(struct trace_event_raw_sys_exit *args)

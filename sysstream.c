@@ -58,7 +58,12 @@ static bool check_log_file_overrite(char *filename){
 static void initParams(int argc, char *argv[]){
   int option;
   int count = 1;
-  while ((option = getopt(argc, argv, ":f:l:mphvad")) != -1){
+
+  #ifndef _RPI_
+    while ((option = getopt(argc, argv, ":f:l:mphvad")) != -1){
+  #else
+    while ((option = getopt(argc, argv, ":f:l:mphva")) != -1){
+  #endif
     printf("OPTION %c\n", option);
     switch(option) {
         case 'f':
@@ -86,10 +91,12 @@ static void initParams(int argc, char *argv[]){
             MONITOR_EVERYTHING = true;
             count++;
             break;
+        #ifndef _RPI_
         case 'd':
             DYNAMIC_MONITOR = true;
             count++;
             break;
+        #endif
         case 'h':
             printf("Usage: %s [-f <file>] [-m] [-v] [-h] [PID_LIST...]\n", argv[0]);
             printf("Options:\n");
@@ -98,7 +105,9 @@ static void initParams(int argc, char *argv[]){
             printf("  -m         : Include monitor events (by default always excluded) \n");
             printf("  -v         : Display verbose output\n");
             printf("  -a         : Monitor everything overrides all filters\n");
+            #ifndef _RPI_
             printf("  -d         : Dynamic all new processes created\n");
+            #endif
             printf("  -h         : Display this help message\n\n");
             printf("  PID_LIST   : Comma seperated list of PIDs to monitor\n\n");
             exit(0);
