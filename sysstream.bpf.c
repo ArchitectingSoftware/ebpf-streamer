@@ -7,6 +7,8 @@
 
 #define PF_KTHREAD		0x00200000
 
+#define FUTEX_SC_NUMBER 98
+
 char LICENSE[] SEC("license") = "GPL";  
 
 const volatile pid_t filter_pid = 0;			//set to PID of monitor if you want to exclude these messages
@@ -16,6 +18,7 @@ const volatile bool include_monitor_events = false;
 const volatile bool use_pid_filter_table = true;
 const volatile bool montior_everything = false;
 const volatile bool dynamic_pid_service = false;
+const volatile bool eliminate_futex = true;
 
 const volatile bool log_enter_exit = false;
 const volatile bool log_syscall = false;
@@ -172,6 +175,10 @@ int sys_exit(struct trace_event_raw_sys_exit *args)
 				}
 			}
 		}
+	}
+
+	if (eliminate_futex && syscall_id == FUTEX_SC_NUMBER){
+		return 0;
 	}
 			
 	//END OF FILTERING, this is something we want to stream back to userland

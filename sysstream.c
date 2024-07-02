@@ -22,6 +22,7 @@ bool INCLUDE_MONITOR_EVENTS = false;
 bool VERBOSE_OUTPUT = false;
 bool MONITOR_EVERYTHING = false;
 bool USE_PID_FILTER_TABLE = true;
+bool ELIMINATE_FUTEX=true;
 bool DYNAMIC_MONITOR=false;
 char DEFAULT_FILE_NAME[128] = "sysstream.log";
 uint32_t PID_FILTER_TABLE[MAX_PIDS];
@@ -60,9 +61,9 @@ static void initParams(int argc, char *argv[]){
   int count = 1;
 
   #ifndef _RPI_
-    while ((option = getopt(argc, argv, ":f:l:mphvad")) != -1){
+    while ((option = getopt(argc, argv, ":f:l:mphvadx")) != -1){
   #else
-    while ((option = getopt(argc, argv, ":f:l:mphva")) != -1){
+    while ((option = getopt(argc, argv, ":f:l:mphvax")) != -1){
   #endif
     printf("OPTION %c\n", option);
     switch(option) {
@@ -74,6 +75,10 @@ static void initParams(int argc, char *argv[]){
         case 'l':
             MIN_PROCESS_ID = atoi(optarg);
             count += 2;
+            break;
+        case 'x':
+            ELIMINATE_FUTEX= false;
+            count ++;
             break;
         case 'm':
             INCLUDE_MONITOR_EVENTS = true;
@@ -105,6 +110,7 @@ static void initParams(int argc, char *argv[]){
             printf("  -m         : Include monitor events (by default always excluded) \n");
             printf("  -v         : Display verbose output\n");
             printf("  -a         : Monitor everything overrides all filters\n");
+            printf("  -x         : Include futex syscalls (default is to ignore)\n");
             #ifndef _RPI_
             printf("  -d         : Dynamic all new processes created\n");
             #endif
@@ -135,6 +141,7 @@ static void initParams(int argc, char *argv[]){
   printf("MONITOR_EVERYTHING: %d\n", MONITOR_EVERYTHING);
   printf("VERBOSE_OUTPUT: %d\n", VERBOSE_OUTPUT);
   printf("MIN_PROCESS_ID: %d\n", MIN_PROCESS_ID);
+  printf("ELIMINATE_FUTEX: %d\n", ELIMINATE_FUTEX);
   for (int i = 0; i < PID_FILTER_TABLE_SIZE; i++){
     printf("\t- %d. pid to monitor: %d\n", i,PID_FILTER_TABLE[i]);
   }
@@ -213,6 +220,8 @@ int main(int argc, char **argv) {
   skel->rodata->montior_everything = MONITOR_EVERYTHING;
   skel->rodata->min_pid_to_monitor = MIN_PROCESS_ID;
   skel->rodata->dynamic_pid_service = DYNAMIC_MONITOR;
+  skel->rodata->eliminate_futex = ELIMINATE_FUTEX;
+
   
   //2. LOAD the EBPF Handler INTO Kernel
   err = sysstream_bpf__load(skel);
