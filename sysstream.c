@@ -134,6 +134,7 @@ static void initParams(int argc, char *argv[]){
     PID_FILTER_TABLE[i-count] = atoi(argv[i]); //argv[0] is the program name
   }
   printf("DUMPING ARGS \n");
+  printf("MY PID %d\n", getpid());
   printf("DEFAULT_FILE_NAME: %s\n", DEFAULT_FILE_NAME);
   printf("INCLUDE_MONITOR_EVENTS: %d\n", INCLUDE_MONITOR_EVENTS);
   printf("USE_PID_FILTER_TABLE: %d\n", USE_PID_FILTER_TABLE);
